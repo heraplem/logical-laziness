@@ -3,26 +3,30 @@ Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 Generalizable All Variables.
 
-Section Lazy.
+Inductive type : Type :=
+| bool__t : type
+| prod__t (a b : type) : type
+| list__t (a : type) : type.
 
-  Context (name : Type).
+Definition Var : Type :=
+  type -> Type.
 
-  Inductive type : Type :=
-  | t_bool : type
-  | t_prod (a b : type) : type
-  | t_list (a : type) : type.
+Section term.
+
+  Context (var : Var).
 
   Inductive term : type -> Type :=
-  | t_false : term t_bool
-  | t_true : term t_bool
-  | t_if (b : term t_bool) `(t : term a) (f : term a) : term a
-  | t_pair `(x : term a) `(y : term b) : term (t_prod a b)
-  | t_fst `(p : term (t_prod a b)) : term a
-  | t_snd `(p : term (t_prod a b)) : term b
-  | t_nil : `(term (t_list a))
-  | t_cons `(x : term a) (xs : term (t_list a)) : term (t_list a)
-  | t_foldr (u v : name) `(t : term b) (e : term b) `(xs : term (t_list a)) : term b
-  | t_var (u : name) : `(term a)
-  | t_let (u : name) `(t1 : term a) `(t2 : term b) : term b.
+  | false__t : term bool__t
+  | true__t : term bool__t
+  | eq__t `(x : term a) (y : term a) : term bool__t
+  | if__t (b : term bool__t) `(t : term a) (f : term a) : term a
+  | pair__t `(x : term a) `(y : term b) : term (prod__t a b)
+  | fst__t `(p : term (prod__t a b)) : term a
+  | snd__t `(p : term (prod__t a b)) : term b
+  | nil__t : `(term (list__t a))
+  | cons__t `(x : term a) (xs : term (list__t a)) : term (list__t a)
+  | foldr__t `(t : var a -> var b -> term b) (e : term b) `(xs : term (list__t a)) : term b
+  | var__t `(u : var a) : term a
+  | let__t `(t1 : term a) `(t2 : var a -> term b) : term b.
 
-End Lazy.
+End term.
