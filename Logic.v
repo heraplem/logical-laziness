@@ -39,6 +39,10 @@ Section term.
   | fail__t : `(term a)
   | choose__t `(x : term a) (y : term a) : term a
   | free__t `(t : var a -> term b) : term b.
+  (* case? *)
+  (* explicit representation of approximation? *)
+  (* a approximates b <=> there is a substitution (of free variables) from a to b? *)
+  (* a approximates b <=> a narrows to b? *)
 
   Fixpoint denote_type (a : Explicit.type) : type :=
     match a with
@@ -71,12 +75,36 @@ Section term.
       | Explicit.let__t t1 t2 => let__t (denote_term t1) (fun u => denote_term (t2 u))
       | Explicit.lazy__t t => choose__t none__t (some__t (denote_term t))
       | Explicit.force__t t =>
-          free__t (fun u => let u := var__t u
-                         in if__t (eq__t (denote_term t) (some__t u))
-                              u
+          free__t (fun u => let u' := var__t u
+                         in if__t (eq__t (denote_term t) (some__t u'))
+                              u'
                               fail__t)
       end.
-    
+
   End denote_term.
 
 End term.
+
+Fixpoint embed_type (a : type) : Type :=
+  match a with
+  | bool__t => bool
+  | option__t a => option (embed_type a)
+  | prod__t a b => embed_type a * embed_type b
+  | list__t a => list (embed_type a)
+  end.
+
+Definition D (a : type) : Type
+  := embed_type a -> Prop.
+
+Axiom TODO : forall {A}, A.
+
+Open Scope type_scope.
+
+Fixpoint embed_term `(t : term embed_type a) : D a :=
+  match t in term _ a return D a with
+  | false__t => fun x => x = false
+  | true__t => fun x => x = true
+  | if__t b t f => fun x => (embed_term b true /\ embed_term t x) \/ (embed_term b false /\ embed_term f x)
+  | free__t t => fun x => exists y, embed_term (t y) x
+  | _ => TODO
+  end.
