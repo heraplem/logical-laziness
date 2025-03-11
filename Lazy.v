@@ -50,11 +50,11 @@ Definition eq_dec : forall `(x : denote_type a) (y : denote_type a), {x = y} + {
   - exact (bool_dec x y).
   - destruct x as [x' y'], y as [x'' y''].
     destruct (eq_dec _ x' x''), (eq_dec _ y' y'').
-    1: subst. auto.
+    1: subst; auto.
     1, 2, 3: right; inversion 1; contradiction.
   - exact (list_eq_dec (eq_dec _) x y).
 Defined.
-Arguments eq_dec {a} (x) (y).
+Arguments eq_dec {a} x y.
 
 Definition eq `(x : denote_type a) (y : denote_type a) : bool :=
   match eq_dec x y with
