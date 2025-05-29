@@ -1,4 +1,10 @@
-Require LogicalLaziness.Explicit.
+Require Import Stdlib.Unicode.Utf8.
+
+Require Import Stdlib.Bool.Bool.
+Require Stdlib.Init.Nat.
+
+Require Import LogicalLaziness.Core.
+Require Import LogicalLaziness.Explicit.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
@@ -7,104 +13,239 @@ Generalizable All Variables.
 
 Inductive type : Type :=
 | bool__t : type
-| option__t (a : type) : type  (* new *)
-| prod__t (a b : type) : type
+| prod__t (a b : type)
+| option__t (a : type) : type
+| nat__t : type
 | list__t (a : type) : type.
 
-Definition Var : Type :=
+Definition Rep : Type :=
   type -> Type.
 
 Section term.
 
-  Context (var : Var).
+  Context (rep : Rep).
 
   Inductive term : type -> Type :=
-  (* core language *)
   | false__t : term bool__t
   | true__t : term bool__t
-  | eq__t `(x : term a) (y : term a) : term bool__t
-  | if__t (b : term bool__t) `(t : term a) (f : term a) : term a
-  | pair__t `(x : term (t__t a)) `(y : term (t__t b)) : term (prod__t a b)
-  | fst__t `(p : term (prod__t a b)) : term a
-  | snd__t `(p : term (prod__t a b)) : term b
-  | nil__t : `(term (list__t a))
-  | cons__t `(x : term (t__t a)) (xs : term (t__t (list__t a))) : term (list__t a)
-  | foldr__t `(f : var (t__t a) -> var (t__t b) -> term b) (e : term b) `(xs : term (list__t a)) : term b
-  | var__t `(v : var a) : term a
-  | let__t `(t1 : term a) `(t2 : var (t__t a) -> term b) : term b
-  (* option *)
-  | none__t : `(term (option__t a))
-  | some__t `(t : term a) : term (option__t a)
-  (* logic programming *)
-  | fail__t : `(term a)
-  | choose__t `(x : term a) (y : term a) : term a
-  | free__t `(t : var a -> term b) : term b.
-  (* case? *)
-  (* explicit representation of approximation? *)
-  (* a approximates b <=> there is a substitution (of free variables) from a to b? *)
-  (* a approximates b <=> a narrows to b? *)
-
-  Fixpoint denote_type (a : Explicit.type) : type :=
-    match a with
-    | Explicit.bool__t => bool__t
-    | Explicit.prod__t a b => prod__t (denote_type a) (denote_type b)
-    | Explicit.list__t a => list__t (denote_type a)
-    | Explicit.t__t a => option__t (denote_type a)
-    end.
-
-  Definition thunks_var : Explicit.type -> Type :=
-    fun a => var (denote_type a).
-
-  Section denote_term.
-
-    Fixpoint denote_term `(t : Explicit.term thunks_var a) : term (denote_type a) :=
-      match t in Explicit.term _ a return term (denote_type a) with
-      | Explicit.false__t => false__t
-      | Explicit.true__t => true__t
-      | Explicit.eq__t x y => eq__t (denote_term x) (denote_term y)
-      | Explicit.if__t b t f =>
-          if__t (denote_term b) (denote_term t) (denote_term f)
-      | Explicit.pair__t x y => pair__t (denote_term x) (denote_term y)
-      | Explicit.fst__t p => fst__t (denote_term p)
-      | Explicit.snd__t p => snd__t (denote_term p)
-      | Explicit.nil__t => nil__t
-      | Explicit.cons__t x xs => cons__t (denote_term x) (denote_term xs)
-      | Explicit.foldr__t f e xs =>
-          foldr__t (fun u v => denote_term (f u v)) (denote_term e) (denote_term xs)
-      | Explicit.var__t v => var__t v
-      | Explicit.let__t t1 t2 => let__t (denote_term t1) (fun u => denote_term (t2 u))
-      | Explicit.lazy__t t => choose__t none__t (some__t (denote_term t))
-      | Explicit.force__t t =>
-          free__t (fun u => let u' := var__t u
-                         in if__t (eq__t (denote_term t) (some__t u'))
-                              u'
-                              fail__t)
-      end.
-
-  End denote_term.
+  | equals__t `(u : term α) (v : term α) : term bool__t
+  | approx__t `(u : term α) (v : term α) : term bool__t
+  | if__t (c : term bool__t) `(t : term α) (f : term α) : term α
+  | pair__t `(u : term α) `(v : term β) : term (prod__t α β)
+  | fst__t `(t : term (prod__t α β)) : term α
+  | snd__t `(t : term (prod__t α β)) : term β
+  | Some__t `(u : term α) : term (option__t α)
+  | None__t : `(term (option__t α))
+  | option_rec__t `(u : rep α -> term β) (v : term β) (t : term (option__t α)) : term β
+  | O__t : term nat__t
+  | S__t (n : term nat__t) : term nat__t
+  | iter__t (n : term nat__t) `(s : rep α -> term α) `(z : term α) : term α
+  | nil__t : `(term (list__t α))
+  | cons__t `(x : term (option__t α)) (xs : term (option__t (list__t α))) : term (list__t α)
+  | fold_right__t `(f : rep (option__t α) -> rep (option__t β) -> term (m__t β)) (e : term β) (xs : term (list__t α)) : term β
+  | let__t `(d : term α) `(t : rep α -> term β) : term β
+  | var__t `(x : rep α) : term α
+  | choose__t `(u : term α) (v : term α) : term α
+  | fail__t : `(term α)
+  | free__t `(f : rep α → term β) : term β.
 
 End term.
 
-Fixpoint embed_type (a : type) : Type :=
-  match a with
-  | bool__t => bool
-  | option__t a => option (embed_type a)
-  | prod__t a b => embed_type a * embed_type b
-  | list__t a => list (embed_type a)
-  end.
+Definition program (α : type) : Type :=
+  forall {rep}, term rep α.
 
-Definition D (a : type) : Type
-  := embed_type a -> Prop.
+Section eval.
 
-Axiom TODO : forall {A}, A.
+  (* Embed object language types into metalanguage types. *)
+  Reserved Notation "⌈ α ⌉".
+  Fixpoint embed_type (α : type) : Type :=
+    match α with
+    | bool__t => bool
+    | option__t α => option ⌈ α ⌉
+    | prod__t α β => ⌈ α ⌉ * ⌈ β ⌉
+    | nat__t => nat
+    | list__t α => listA ⌈ α ⌉
+    end
+  where "⌈ α ⌉" := (embed_type α).
 
-Open Scope type_scope.
+  (* The language is nondeterministic, so a term is denoted by a set of
+     values. *)
+  Definition denote_type (α : type) : Type :=
+    ⌈ α ⌉ → Prop.
+  Notation "⟦ α ⟧" := (denote_type α).
 
-Fixpoint embed_term `(t : term embed_type a) : D a :=
-  match t in term _ a return D a with
-  | false__t => fun x => x = false
-  | true__t => fun x => x = true
-  | if__t b t f => fun x => (embed_term b true /\ embed_term t x) \/ (embed_term b false /\ embed_term f x)
-  | free__t t => fun x => exists y, embed_term (t y) x
-  | _ => TODO
-  end.
+  Local Notation term := (term embed_type).
+  
+  Reserved Notation "t ⇓ v" (at level 50).
+  Inductive eval : `(term α -> ⟦ α ⟧) :=
+  | false__d : false__t ⇓ false
+  | true__d : true__t ⇓ true
+  | equals__d
+      `(t₁ : term α) (t₂ : term α) :
+    `(t₁ ⇓ v₁ → t₂ ⇓ v₂ → reflect (v₁ = v₂) b → equals__t t₁ t₂ ⇓ b)
+  | if__d
+      `(c : term bool__t) `(t : term α) (f : term α) :
+    `(c ⇓ b → (if b then t else f) ⇓ v → if__t c t f ⇓ v)
+  | pair__d
+      `(t₁ : term α) `(t₂ : term β) :
+    `(t₁ ⇓ a → t₂ ⇓ b → pair__t t₁ t₂ ⇓ (a, b))
+  | fst__d
+      `(t : term (prod__t α β)) :
+    `(t ⇓ v → fst__d t ⇓ fst v)
+  | snd__d
+      `(t : term (prod__t α β)) :
+    `(t ⇓ v → snd__d t ⇓ snd v)
+  | None__d : `(@None__t _ α ⇓ None)
+  | Some__d `(t : term α) : `(t ⇓ v → Some__t t ⇓ Just v)
+  | O__d : O__t ⇓ O
+  | S__d : `(t ⇓ n → S__t t ⇓ (S n))
+  | nil__d : `(@nil__t _ α ⇓ nilA)
+  | cons__d
+      `(t₁ : term (option__t α)) (t₂ : term (option__t (list__t α))) :
+    `(t₁ ⇓ v₁ → t₂ ⇓ v₂ → cons__t t₁ t₂ ⇓ consA v₁ v₂)
+  | iter__d
+      (n : term nat__t)
+      `(s : ⌈ α ⌉ → term α) (z : term α) :
+    `(n ⇓ n' → Nat.iter n' (lift__t s) z ⇓ v → iterate__t n s z ⇓ v)
+  | let__d
+      `(d : term α) `(b : ⌈ α ⌉ → term β) :
+    `(d ⇓ v₁ → b v₁ ⇓ v₂ → let__t d b ⇓ v₂)
+  | var__d `(t : term α) : `(t ⇓ v → var t ⇓ v)
+  | choose_left__d `(t₁ : term α) (t₂ : term α) : `(t₁ ⇓ v → choose__t t₁ t₂ ⇓ v)
+  | choose_right__d `(t₁ : term α) (t₂ : term α) : `(t₂ ⇓ v → choose__t t₁ t₂ ⇓ v)
+  where "t ⇓ v" := (eval t v).
+
+End eval.
+
+Section translate.
+
+  (* Terms translated from the explicit language land in a writer monad over the
+     natural numbers with addition, which we here denote m__t. *)
+  Definition m__t (a : type) : type :=
+    prod__t a nat__t.
+
+  Context (rep : Rep).
+
+  Local Notation term := (term rep).
+
+  Definition lift__t `(f : rep α → term β) : term α → term β :=
+    fun t => let__t t f.
+
+  Definition assert__t (t1 : term bool__t) `(t2 : term a) : term a :=
+    if__t t1 t2 fail__t.
+
+  Definition add__t (m n : term nat__t) : term nat__t :=
+    iter__t n (fun x => S__t (var__t x)) m.
+
+  Definition bind__t `(u : term (m__t a)) `(k : rep a -> term (m__t b)) :
+    term (prod__t b nat__t) :=
+    let__t u
+      (fun u =>
+         let__t (fst__t (var__t u))
+           (fun x =>
+              let__t (k x)
+                (fun v =>
+                   pair__t
+                     (fst__t (var__t v))
+                     (add__t (snd__t (var__t u)) (snd__t (var__t v)))))).
+
+  Definition pure__t `(u : term a) : term (m__t a) :=
+    pair__t u O__t.
+
+  Definition map__t `(f : rep a -> term b) (u : term (m__t a)) : term (m__t b) :=
+    let__t u
+      (fun u =>
+         let__t (fst__t (var__t u))
+           (fun x =>
+              pair__t (f x) (snd__t (var__t u)))).
+
+  Definition lazy__t `(u : term a) : term (option__t a) :=
+    choose__t None__t (Some__t u).
+
+  Definition lazily__t `(u : term (m__t a)) : term (m__t (option__t a)) :=
+    choose__t (map__t (fun x => Some__t (var__t x)) u)
+      (pair__t None__t O__t).
+
+  Definition force__t `(u : term (option__t a)) : term (m__t a) :=
+    option_rec__t (fun x => pure__t (var__t x)) fail__t u.
+
+  Definition and__t (u v : rep bool__t) : term bool__t :=
+    let u := var__t u in
+    let v := var__t v in
+    if__t u v false__t.
+
+  Fixpoint translate_type (a : Explicit.type) : type :=
+    match a with
+    | Explicit.bool__t => bool__t
+    | Explicit.t__t a => option__t (translate_type a)
+    | Explicit.list__t a => list__t (translate_type a)
+    end.
+
+  Definition rep' : Explicit.Rep :=
+    fun α => rep (translate_type α).
+
+  Fixpoint translate `(u : Explicit.term rep' a) : term (m__t (translate_type a)) :=
+    match u with
+    | Explicit.false__t =>
+        pure__t false__t
+    | Explicit.true__t =>
+        pure__t true__t
+    | Explicit.if__t c t f =>
+        bind__t (translate c)
+          (fun c => if__t (var__t c)
+                   (translate t)
+                   (translate f))
+    | Explicit.nil__t =>
+        pure__t nil__t
+    | Explicit.cons__t x xs =>
+        bind__t (translate x)
+          (fun x => bind__t (translate xs)
+                   (fun xs => pure__t (cons__t (var__t x) (var__t xs))))
+    | Explicit.foldr__t f e xs =>
+        bind__t (translate e)
+          (fun e => bind__t (translate xs)
+                   (fun xs => pure__t (fold_right__t
+                                      (fun x y => translate (f x y))
+                                      (var__t e)
+                                      (var__t xs))))
+    | Explicit.var__t x =>
+        pure__t (var__t x)
+    | Explicit.let__t d b =>
+        bind__t (translate d)
+          (fun d => translate (b d))
+    | Explicit.tick__t t =>
+        let__t (translate t)
+          (fun u => pair__t
+                   (fst__t (var__t u))
+                   (S__t (snd__t (var__t u))))
+    | Explicit.lazy__t t =>
+        bind__t (translate t)
+          (fun t => (pure__t (choose__t
+                             (Some__t (var__t t))
+                             None__t)))
+    | Explicit.force__t t =>
+        bind__t (translate t)
+          (fun t => pure__t (option_rec__t
+                            var__t
+                            fail__t
+                            (var__t t)))
+    end.
+
+  (* Translate a term with one free variable. *)
+  Definition translate1 `(f : rep' α → Explicit.term rep' β) :
+    rep' α → term (m__t (translate_type β)) :=
+    fun r => translate (f r).
+
+  Definition demand
+    `(input : rep' α)
+    `(outputD : rep' β)
+    `(f : rep' α → Explicit.term rep' β) : term (m__t (translate_type α)) :=
+    free__t
+      (fun inputD =>
+         free__t
+           (fun c =>
+              assert__t (approx__t (var__t inputD) (var__t input))
+                (assert__t (equals__t (translate1 f inputD) (pair__t (var__t outputD) (var__t c)))
+                   (pair__t (var__t inputD) (var__t c))))).
+  
+End translate.
