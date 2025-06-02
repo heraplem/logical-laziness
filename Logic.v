@@ -16,7 +16,7 @@ Inductive type : Type :=
 | prod__t (a b : type)
 | option__t (a : type) : type
 | nat__t : type
-| list__t (a : type) : type.
+| listA__t (a : type) : type.
 
 Definition Rep : Type :=
   type -> Type.
@@ -40,9 +40,9 @@ Section term.
   | O__t : term nat__t
   | S__t (n : term nat__t) : term nat__t
   | iter__t (n : term nat__t) `(s : rep α -> term α) `(z : term α) : term α
-  | nil__t : `(term (list__t α))
-  | cons__t `(x : term (option__t α)) (xs : term (option__t (list__t α))) : term (list__t α)
-  | fold_right__t `(f : rep (option__t α) -> rep (option__t β) -> term (m__t β)) (e : term β) (xs : term (list__t α)) : term β
+  | nilA__t : `(term (listA__t α))
+  | consA__t `(x : term (option__t α)) (xs : term (option__t (listA__t α))) : term (listA__t α)
+  | fold_right__t `(f : rep (option__t α) -> rep (option__t β) -> term (m__t β)) (e : term β) (xs : term (listA__t α)) : term β
   | let__t `(d : term α) `(t : rep α -> term β) : term β
   | var__t `(x : rep α) : term α
   | choose__t `(u : term α) (v : term α) : term α
@@ -64,7 +64,7 @@ Section eval.
     | option__t α => option ⌈ α ⌉
     | prod__t α β => ⌈ α ⌉ * ⌈ β ⌉
     | nat__t => nat
-    | list__t α => listA ⌈ α ⌉
+    | listA__t α => listA ⌈ α ⌉
     end
   where "⌈ α ⌉" := (embed_type α).
 
@@ -75,7 +75,7 @@ Section eval.
   Notation "⟦ α ⟧" := (denote_type α).
 
   Local Notation term := (term embed_type).
-  
+
   Reserved Notation "t ⇓ v" (at level 50).
   Inductive eval : `(term α -> ⟦ α ⟧) :=
   | false__d : false__t ⇓ false
@@ -99,10 +99,10 @@ Section eval.
   | Some__d `(t : term α) : `(t ⇓ v → Some__t t ⇓ Just v)
   | O__d : O__t ⇓ O
   | S__d : `(t ⇓ n → S__t t ⇓ (S n))
-  | nil__d : `(@nil__t _ α ⇓ nilA)
-  | cons__d
-      `(t₁ : term (option__t α)) (t₂ : term (option__t (list__t α))) :
-    `(t₁ ⇓ v₁ → t₂ ⇓ v₂ → cons__t t₁ t₂ ⇓ consA v₁ v₂)
+  | nilA__d : `(@nilA__t _ α ⇓ nilA)
+  | consA__d
+      `(t₁ : term (option__t α)) (t₂ : term (option__t (listA__t α))) :
+    `(t₁ ⇓ v₁ → t₂ ⇓ v₂ → consA__t t₁ t₂ ⇓ consA v₁ v₂)
   | iter__d
       (n : term nat__t)
       `(s : ⌈ α ⌉ → term α) (z : term α) :
@@ -113,6 +113,7 @@ Section eval.
   | var__d `(t : term α) : `(t ⇓ v → var t ⇓ v)
   | choose_left__d `(t₁ : term α) (t₂ : term α) : `(t₁ ⇓ v → choose__t t₁ t₂ ⇓ v)
   | choose_right__d `(t₁ : term α) (t₂ : term α) : `(t₂ ⇓ v → choose__t t₁ t₂ ⇓ v)
+  | free__d `(r : ⌈ α ⌉) `(k : ⌈ α ⌉ → term β) : `(k r ⇓ t → free__t k ⇓ t)
   where "t ⇓ v" := (eval t v).
 
 End eval.
@@ -178,7 +179,7 @@ Section translate.
     match a with
     | Explicit.bool__t => bool__t
     | Explicit.t__t a => option__t (translate_type a)
-    | Explicit.list__t a => list__t (translate_type a)
+    | Explicit.list__t a => listA__t (translate_type a)
     end.
 
   Definition rep' : Explicit.Rep :=
@@ -196,11 +197,11 @@ Section translate.
                    (translate t)
                    (translate f))
     | Explicit.nil__t =>
-        pure__t nil__t
+        pure__t nilA__t
     | Explicit.cons__t x xs =>
         bind__t (translate x)
           (fun x => bind__t (translate xs)
-                   (fun xs => pure__t (cons__t (var__t x) (var__t xs))))
+                   (fun xs => pure__t (consA__t (var__t x) (var__t xs))))
     | Explicit.foldr__t f e xs =>
         bind__t (translate e)
           (fun e => bind__t (translate xs)
@@ -245,7 +246,20 @@ Section translate.
          free__t
            (fun c =>
               assert__t (approx__t (var__t inputD) (var__t input))
-                (assert__t (equals__t (translate1 f inputD) (pair__t (var__t outputD) (var__t c)))
+                (assert__t (equals__t
+                              (translate1 f inputD)
+                              (pair__t (var__t outputD) (var__t c)))
                    (pair__t (var__t inputD) (var__t c))))).
-  
+
+(*
+let inputD free in
+let c free in
+assert inputD ≲ input;
+assert ⟦f⟧(inputD) = (outputD, c);
+(inputD, c)
+
+⟦t⟧__demand : ⟦Γ⟧__eval × ⟦B⟧__approx → ⟦Γ⟧__approx × ℕ
+*)
+
+
 End translate.

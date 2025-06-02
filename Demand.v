@@ -1,12 +1,15 @@
 Require Import LogicalLaziness.Core.
-Require Import LogicalLaziness.Lazy.
+Require LogicalLaziness.Explicit.
 
 Set Implicit Arguments.
 Set Contextual Implicit.
 Set Maximal Implicit Insertion.
 Generalizable All Variables.
 
-Axiom type : Type.
+Inductive type : Type :=
+| bool__t : type
+| list__t (a : type) : type
+| t__t (a : type) : type.
 
 Definition Rep : Type :=
   type -> Type.
