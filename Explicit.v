@@ -1,4 +1,3 @@
-Require Import Stdlib.Unicode.Utf8.
 Require Import Stdlib.Lists.List.
 Require Import ExtLib.Structures.Monad.
 Require Import ExtLib.Data.Monads.OptionMonad.
@@ -13,29 +12,27 @@ Set Maximal Implicit Insertion.
 Generalizable All Variables.
 
 Inductive type : Type :=
-| bool__t : type
-| T__t (alpha : type) : type
-| list__t (alpha : type) : type.
+| bool__type : type
+| T__type (alpha : type) : type
+| list__type (alpha : type) : type.
 
-Reserved Notation "⟦ alpha ⟧__eval".
+Reserved Notation "[[ alpha ]]__eval".
 Fixpoint value (alpha : type) : Type :=
   match alpha with
-  | bool__t => bool
-  | prod__t alpha beta => ⟦ alpha ⟧__eval * ⟦ beta ⟧__eval
-  | T__t alpha => ⟦ alpha ⟧__eval
-  | list__t alpha => list ⟦ alpha ⟧__eval
+  | bool__type => bool
+  | T__type alpha => [[ alpha ]]__eval
+  | list__type alpha => list [[ alpha ]]__eval
   end
-where "⟦ α ⟧__eval" := (value α).
+where "[[ alpha ]]__eval" := (value alpha).
 
-Reserved Notation "⟦ alpha ⟧__approx".
-Fixpoint approx (α : type) : Type :=
-  match α with
-  | bool__t => bool
-  | prod__t alpha beta => T ⟦ alpha ⟧__approx * T ⟦ beta ⟧__approx
-  | T__t alpha => T ⟦ alpha ⟧__approx
-  | list__t alpha => listA ⟦ alpha ⟧__approx
+Reserved Notation "[[ alpha ]]__approx".
+Fixpoint approx (alpha : type) : Type :=
+  match alpha with
+  | bool__type => bool
+  | T__type alpha => T [[ alpha ]]__approx
+  | list__type alpha => listA [[ alpha ]]__approx
   end
-where "⟦ alpha ⟧__approx" := (approx alpha).
+where "[[ alpha ]]__approx" := (approx alpha).
 
 Definition Rep : Type :=
   type -> Type.
@@ -49,19 +46,17 @@ Section term.
   Context (rep : Rep).
 
   Inductive term : type -> Type :=
-  | var__t `(x : rep alpha) : term alpha
-  | let__t (alpha beta : type) (t__1 : term alpha) (t__2 : rep alpha -> term beta) : term beta
-  | true__t : term bool__t
-  | false__t : term bool__t
-  | if__t (b : term bool__t) `(t : term alpha) (f : term alpha) : term alpha
-  | proj1__t (alpha beta : type) : term (prod__t alpha beta) -> term alpha
-  | proj2__t (alpha beta : type) : term (prod__t alpha beta) -> term beta
-  | nil__t : `(term (list__t alpha))
-  | cons__t `(x : term (T__t alpha)) (xs : term (T__t (list__t alpha))) : term (list__t alpha)
-  | fold_right__t `(f : rep (T__t alpha) -> rep (T__t beta) -> term beta) (e : term beta) (xs : term (list__t alpha)) : term beta
-  | tick__t `(t : term alpha) : term alpha
-  | lazy__t `(t : term alpha) : term (T__t alpha)
-  | force__t `(t : term (T__t alpha)) : term alpha.
+  | var__term `(x : rep alpha) : term alpha
+  | let__term (alpha beta : type) (t__1 : term alpha) (t__2 : rep alpha -> term beta) : term beta
+  | true__term : term bool__type
+  | false__term : term bool__type
+  | if__term (b : term bool__type) `(t : term alpha) (f : term alpha) : term alpha
+  | nil__term : `(term (list__type alpha))
+  | cons__term `(x : term (T__type alpha)) (xs : term (T__type (list__type alpha))) : term (list__type alpha)
+  | fold_right__term (alpha beta : type) (f : rep (T__type alpha) -> rep (T__type beta) -> term beta) (e : term beta) (xs : term (list__type alpha)) : term beta
+  | tick__term `(t : term alpha) : term alpha
+  | lazy__term `(t : term alpha) : term (T__type alpha)
+  | force__term `(t : term (T__type alpha)) : term alpha.
 
 End term.
 
@@ -97,18 +92,103 @@ End term.
 (*   end *)
 (* where "⟦ t ⟧__eval" := (eval t). *)
 
+Section eval.
+  Parameter (rep : Rep).
+  Parameter (proj : forall (alpha : type), rep alpha -> [[ alpha ]]__eval).
+  Parameter (inj : forall (alpha : type), [[ alpha ]]__eval -> rep alpha).
+
+  Local Definition toT (alpha : type) (r : rep alpha) : rep (T__type alpha) :=
+    inj (proj r : [[ T__type alpha ]]__eval).
+  Local Definition fromT (alpha : type) (r : rep (T__type alpha)) : rep alpha :=
+    inj (proj r : [[ alpha ]]__eval).
+
+  Reserved Notation "[[ t ]]__eval".
+
+  (* Fixpoint eval (alpha : type) (t : term rep alpha) : rep alpha := *)
+  (*   match t with *)
+  (*   | var__term x => x *)
+  (*   | let__term t__1 k__2 => eval (k__2 (eval t__1)) *)
+  (*   | true__term => inj (true : value bool__type) *)
+  (*   | false__term => inj (false : value bool__type) *)
+  (*   | if__term t__1 t__2 t__3 => if (proj [[ t__1 ]]__eval) then [[ t__2 ]]__eval else [[ t__3 ]]__eval *)
+  (*   | nil__term => inj (nil : value (list__type _)) *)
+  (*   | cons__term t__1 t__2 => inj (cons (proj [[ t__1 ]]__eval) (proj [[ t__2 ]]__eval) : value (list__type _)) *)
+  (*   | fold_right__term k__1 t__2 t__3 => *)
+  (*       fold_right (fun x__1 x__2 => eval (k__1 (inj (x__1 : value (T__type _))) (toT x__2))) *)
+  (*         [[ t__2 ]]__eval *)
+  (*         (proj [[ t__3 ]]__eval) *)
+  (*   | tick__term t__1 => [[ t__1 ]]__eval *)
+  (*   | force__term t__1 => fromT [[ t__1 ]]__eval *)
+  (*   | lazy__term t__1 => toT [[ t__1 ]]__eval *)
+  (*   end *)
+  (* where "[[ t ]]__eval" := (eval t). *)
+
+  Fixpoint eval (alpha : type) (t : term rep alpha) : [[ alpha ]]__eval :=
+    match t with
+    | var__term x => proj x
+    | let__term t__1 k__2 => [[ k__2 (inj [[ t__1 ]]__eval) ]]__eval
+    | true__term => true
+    | false__term => false
+    | if__term t__1 t__2 t__3 => if [[ t__1 ]]__eval then [[ t__2 ]]__eval else [[ t__3 ]]__eval
+    | nil__term => nil
+    | cons__term t__1 t__2 => cons [[ t__1 ]]__eval [[ t__2 ]]__eval
+    | fold_right__term k__1 t__2 t__3 =>
+        fold_right
+          (fun x__1 x__2 => eval (k__1 (inj x__1) (inj x__2)))
+          [[ t__2 ]]__eval
+          [[ t__3 ]]__eval
+    | tick__term t__1 => [[ t__1 ]]__eval
+    | force__term t__1 => [[ t__1 ]]__eval
+    | lazy__term t__1 => [[ t__1 ]]__eval
+    end
+  where "[[ t ]]__eval" := (eval t).
+End eval.
+
 (* Fixpoint hom__demand : Hom := *)
 (*   (* fun alpha beta => ⟦alpha⟧__eval -> ⟦beta⟧__eval * ⟦alpha⟧__approx. *) *)
 (*   fun alpha beta => ⟦alpha⟧__eval -> term hom__demand value beta. *)
 
-Fixpoint demand (alpha : type) (t : term value α) : approx α → nat :=
-  (* let demand1 (α : type) (t : term value α) *)
+Require Import ExtLib.Data.Monads.StateMonad.
+Import ListNotations.
+Import MonadNotation.
+Open Scope type_scope.
+
+Module Type Map.
+  Parameter t : Type.
+  Parameter key : Type.
+  Parameter val : Type.
+
+  Parameter empty : t.
+  Parameter update : (val -> val) -> val -> key -> val.
+End Map.
+
+Fixpoint demand1 (alpha beta : type) (k : [[ alpha ]]__eval -> term value beta) : [[ alpha ]]__eval -> [[ beta ]]__approx -> [[ alpha ]]__approx * nat.
+  intros v outD.
+  specialize (k v).
+
+Fixpoint demand (alpha : type) (t : term (fun beta => nat * [[ beta ]]__eval) alpha) : [[ alpha ]]__approx -> state nat (list (nat * {beta : type & [[ beta ]]__approx}) * nat) :=
   match t with
-  | var__t _ => fun _ => 0
-  | let__t t₁ k₂ => fun d => let c__1 := demand (k₂ ⟦t₁⟧__eval) d in
-                         let c₂ := demand t₁ d
+  | true__term => fun _ => ret (nil, 0)
+  | false__term => fun _ => ret (nil, 0)
+  | var__term (x, _) => fun outD => ret ([(x, existT _ _ outD)], 0)
+  | tick__term t__1 => fun outD =>
+      '(Gamma, c) <- demand t__1 outD ;;
+      ret (Gamma, S c)
+  | lazy__term t__1 => fun outD => match outD with
+                           | undefined => ret ([], 0)
+                           | thunk outD__1 => demand t__1 outD__1
+                           end
+  | force__term t__1 => fun outD => demand t__1 (thunk outD)
   | _ => TODO
   end.
+
+
+(* Fixpoint demand1 (alpha beta : type) (k : _ alpha -> term _ beta) (outD : [[ beta ]]__approx) : [[ alpha ]]__approx := *)
+(*   match k (fun _ => _) with *)
+(*   | true__t =>  *)
+(*   | var__term x => _ *)
+(*   | _ => TODO *)
+(*   end. *)
 
 Inductive lt : ∀ α, approx α -> approx α -> Prop :=
 | lt_refl {α} (x : ⟦ α ⟧ₐ) : lt _ x x
