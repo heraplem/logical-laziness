@@ -26,10 +26,13 @@
         inherit inputs pkgs;
         modules = [
           {
-            packages = [
-              pkgs.coqPackages.coq
-              pkgs.coqPackages.ExtLib
-              pkgs.coqPackages.equations
+            packages = let
+              coqPackages = pkgs.coqPackages_8_20;
+            in [
+              coqPackages.coq
+              coqPackages.ExtLib
+              coqPackages.equations
+              (coqPackages.callPackage ./nix/tlc/package.nix { })
             ];
           }
         ];
